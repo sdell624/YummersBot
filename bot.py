@@ -57,4 +57,6 @@ async def join(ctx):
 async def leave(ctx):
     await ctx.voice_client.disconnect()
 
-# @bot.command(name='play', help='Plays audio from a youtube link')
+@bot.command(name='play', help='Plays audio from a youtube link')
+async def play(ctx, url):
+    pass
