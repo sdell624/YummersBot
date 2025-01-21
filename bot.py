@@ -1,22 +1,24 @@
-import os
 import discord
 from discord.ext import commands
-import youtube_dl
-import ffmpeg
+import yt_dlp
+import asyncio
+import os
 from dotenv import load_dotenv
 
-# Load local .env file and access bot token
-load_dotenv()
-TOKEN = os.getenv('BOT_TOKEN')
-
-# Create bot instance
+# Bot setup
 intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix='!', intents=intents)
 
-# Options for youtube_dl and ffmpeg
-ytdl_format_options = {
+# Load .env to get Discord token (should be in format "DISCORD_TOKEN=[token here]")
+load_dotenv()
+TOKEN = os.getenv('DISCORD_TOKEN')
+
+# YouTube DL options
+YTDL_OPTIONS = {
     'format': 'bestaudio/best',
+    'extractaudio': True,
+    'audioformat': 'mp3',
     'outtmpl': '%(extractor)s-%(id)s-%(title)s.%(ext)s',
     'restrictfilenames': True,
     'noplaylist': True,
@@ -26,37 +28,72 @@ ytdl_format_options = {
     'quiet': True,
     'no_warnings': True,
     'default_search': 'auto',
-    'source_address': '0.0.0.0'
+    'source_address': '0.0.0.0',
 }
 
-ffmpeg_options = {
-    'options': '-vn'
+# FFmpeg options
+FFMPEG_OPTIONS = {
+    'options': '-vn',
+    'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5'
 }
 
-ytdl = youtube_dl.YoutubeDL(ytdl_format_options)
+# Create YT DLP client
+ytdl = yt_dlp.YoutubeDL(YTDL_OPTIONS)
 
-# Function to download and play audio from a youtube link
-def download_audio(url):
-    with ytdl:
-        info = ytdl.extract_info(url, download=False)
-    url2 = info['formats'][0]['url']
-    return url2
+@bot.event
+async def on_ready():
+    print(f'{bot.user} has connected to Discord!')
 
-# Bot commands
-@bot.command(name='join', help='Joins a voice channel')
+@bot.command(name='join')
 async def join(ctx):
-    if not ctx.message.author.voice:
-        await ctx.send(f"{ctx.message.author.name} is not connected to a voice channel")
-        return
+    """Join the user's voice channel"""
+    if ctx.author.voice:
+        channel = ctx.author.voice.channel
+        await channel.connect()
     else:
-        channel = ctx.message.author.voice.channel
+        await ctx.send("You need to be in a voice channel first!")
 
-    await channel.connect()
-
-@bot.command(name='leave', help='Leaves the voice channel')
+@bot.command(name='leave')
 async def leave(ctx):
-    await ctx.voice_client.disconnect()
+    """Leave the voice channel"""
+    if ctx.voice_client:
+        await ctx.voice_client.disconnect()
+    else:
+        await ctx.send("I'm not in a voice channel!")
 
-@bot.command(name='play', help='Plays audio from a youtube link')
-async def play(ctx, url):
-    pass
+@bot.command(name='play')
+async def play(ctx, *, url):
+    """Play audio from a YouTube URL"""
+    try:
+        # Join voice channel if not already in one
+        if not ctx.voice_client:
+            if ctx.author.voice:
+                await ctx.author.voice.channel.connect()
+            else:
+                await ctx.send("You need to be in a voice channel first!")
+                return
+
+        async with ctx.typing():
+            # Get video info and extract URL
+            loop = asyncio.get_event_loop()
+            data = await loop.run_in_executor(None, lambda: ytdl.extract_info(url, download=False))
+            
+            if 'entries' in data:
+                # Take first item from a playlist
+                data = data['entries'][0]
+
+            audio_url = data['url']
+            
+            # Create audio source
+            audio_source = discord.FFmpegPCMAudio(audio_url, **FFMPEG_OPTIONS)
+            
+            # Play the audio
+            ctx.voice_client.play(audio_source)
+            
+            await ctx.send(f'Now playing: {data["title"]}')
+
+    except Exception as e:
+        await ctx.send(f'An error occurred: {str(e)}')
+
+# Replace 'YOUR_TOKEN_HERE' with your bot's token
+bot.run(TOKEN)
