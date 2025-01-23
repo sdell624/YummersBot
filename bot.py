@@ -193,7 +193,7 @@ async def play_next(ctx):
             await ctx.send(f'An error occurred while playing {next_song["title"]}: {str(e)}')
             await play_next(ctx)  # Skip to next song if current one fails
     else:
-        await ctx.send("Queue is empty!")
+        await ctx.send("Queue is empty!") # TODO: This sends when .leave is called. Maybe remove altogether?
 
 # Run bot with token
 bot.run(TOKEN)
