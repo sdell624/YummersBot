@@ -4,7 +4,6 @@ import yt_dlp
 import asyncio
 import os
 from dotenv import load_dotenv
-from collections import deque
 
 # Bot setup
 intents = discord.Intents.default()
@@ -44,7 +43,7 @@ ytdl = yt_dlp.YoutubeDL(YTDL_OPTIONS)
 # Class to manage music queue functionality
 class MusicQueue:
     def __init__(self):
-        self.queue = deque()
+        self.queue = []
         self.current_song = None
     
     def add(self, url, title=None):
@@ -52,7 +51,7 @@ class MusicQueue:
     
     def get_next(self):
         if self.queue:
-            self.current_song = self.queue.popleft()
+            self.current_song = self.queue.pop(0)
             return self.current_song
         return None
     
@@ -100,7 +99,7 @@ async def leave(ctx):
         await ctx.send("I'm not in a voice channel headass")
 
 @bot.command(name='play', aliases=['p'])
-async def play(ctx, *, url):
+async def play(ctx, *, query):
     try:
         # Join voice channel if not already in one
         await join_voice_channel(ctx)
@@ -108,7 +107,15 @@ async def play(ctx, *, url):
         # Get video info
         async with ctx.typing():
             loop = asyncio.get_event_loop()
-            data = await loop.run_in_executor(None, lambda: ytdl.extract_info(url, download=False))
+            
+            # Check if query is a URL (basic check for 'youtube.com' or 'youtu.be')
+            is_url = 'youtube.com' in query or 'youtu.be' in query
+            
+            # If not a URL, prepend 'ytsearch:'
+            search_query = query if is_url else f'ytsearch:{query}'
+            
+            # Extract info using modified query
+            data = await loop.run_in_executor(None, lambda: ytdl.extract_info(search_query, download=False))
             
             if 'entries' in data:
                 data = data['entries'][0]
@@ -165,7 +172,6 @@ async def join_voice_channel(ctx):
             await ctx.author.voice.channel.connect()
         else:
             await ctx.send("You need to be in a voice channel first, silly baka!")
-            raise Exception("User not in voice channel")
 
 async def play_next(ctx):
     if ctx.voice_client is None:
